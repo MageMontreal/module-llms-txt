@@ -43,7 +43,7 @@ class Index implements ActionInterface, HttpGetActionInterface
         private readonly Config                $config,
     ) {}
 
-    public function execute(): Raw|ResponseInterface
+    public function execute()
     {
         $store = $this->storeManager->getStore();
         $storeCode = $store->getCode();
