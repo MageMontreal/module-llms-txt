@@ -1,0 +1,82 @@
+<?php
+/**
+ * Live status panel for generated files. Polls /angeo_llms/status/index every minute.
+ *
+ * @var \Angeo\LlmsTxt\Block\Adminhtml\System\Config\StatusPanel $block
+ */
+declare(strict_types=1);
+
+$panelId = 'angeo-llms-status-' . uniqid();
+$url = $block->getStatusUrl();
+?>
+<div id="<?= /* @noEscape */ $panelId ?>" class="angeo-llms-status-panel">
+    <table class="admin__table-primary" style="width:100%; border-collapse: collapse;">
+        <thead>
+            <tr>
+                <th style="text-align:left; padding:6px;"><?= /* @noEscape */ __('Store') ?></th>
+                <th style="text-align:left; padding:6px;"><?= /* @noEscape */ __('Format') ?></th>
+                <th style="text-align:left; padding:6px;"><?= /* @noEscape */ __('Status') ?></th>
+                <th style="text-align:left; padding:6px;"><?= /* @noEscape */ __('Last Success (UTC)') ?></th>
+                <th style="text-align:right; padding:6px;"><?= /* @noEscape */ __('Size') ?></th>
+                <th style="text-align:right; padding:6px;"><?= /* @noEscape */ __('Items') ?></th>
+                <th style="text-align:right; padding:6px;"><?= /* @noEscape */ __('Duration') ?></th>
+            </tr>
+        </thead>
+        <tbody data-role="rows">
+            <tr><td colspan="7" style="padding:12px; text-align:center; color:#666;"><?= /* @noEscape */ __('Loading status…') ?></td></tr>
+        </tbody>
+    </table>
+</div>
+
+<script>
+require(['jquery'], function ($) {
+    'use strict';
+    var $panel = $('#<?= /* @noEscape */ $panelId ?>');
+    var $tbody = $panel.find('[data-role="rows"]');
+    var url = '<?= /* @noEscape */ $url ?>';
+
+    function escape(s) { return $('<div/>').text(s == null ? '' : s).html(); }
+
+    function formatBytes(b) {
+        b = parseInt(b, 10) || 0;
+        if (b >= 1048576) return (b / 1048576).toFixed(1) + ' MB';
+        if (b >= 1024)    return (b / 1024).toFixed(1) + ' KB';
+        return b + ' B';
+    }
+
+    function render(items) {
+        if (!items || !items.length) {
+            $tbody.html('<tr><td colspan="7" style="padding:12px; text-align:center; color:#666;">No generations recorded yet.</td></tr>');
+            return;
+        }
+        var rows = items.map(function (it) {
+            var color = it.status === 'success' ? '#1e8400' : (it.status === 'failed' ? '#c00' : '#666');
+            var lastSuccess = it.last_success_iso || '—';
+            return '<tr>'
+                + '<td style="padding:6px;">' + escape(it.store_code) + '</td>'
+                + '<td style="padding:6px;">' + escape(it.format) + '</td>'
+                + '<td style="padding:6px; color:' + color + ';"><strong>' + escape(it.status) + '</strong></td>'
+                + '<td style="padding:6px;">' + escape(lastSuccess) + '</td>'
+                + '<td style="padding:6px; text-align:right;">' + formatBytes(it.byte_size) + '</td>'
+                + '<td style="padding:6px; text-align:right;">' + escape(it.item_count) + '</td>'
+                + '<td style="padding:6px; text-align:right;">' + (it.duration_seconds || 0).toFixed(2) + 's</td>'
+                + '</tr>'
+                + (it.error_message
+                    ? '<tr><td colspan="7" style="padding:0 6px 8px; color:#c00; font-size:11px;">' + escape(it.error_message) + '</td></tr>'
+                    : '');
+        }).join('');
+        $tbody.html(rows);
+    }
+
+    function load() {
+        $.getJSON(url).done(function (data) {
+            render(data.items || []);
+        }).fail(function () {
+            $tbody.html('<tr><td colspan="7" style="padding:12px; color:#c00; text-align:center;">Could not load status.</td></tr>');
+        });
+    }
+
+    load();
+    setInterval(load, 60000);
+});
+</script>

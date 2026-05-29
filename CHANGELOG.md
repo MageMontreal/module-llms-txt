@@ -1,54 +1,117 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.  
-Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).  
-This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+All notable changes to **Angeo_LlmsTxt** are documented in this file.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [2.1.3] — 2025-04-29
+## [3.0.0] — 2026-05-23
+
+A full rebuild against the architectural review of 2.1.4. This release is
+**not drop-in compatible** — see the *Breaking Changes* section below for
+migration steps.
+
+### Breaking changes
+
+* **`ProviderInterface::provide()` signature changed** from `string` to
+  `iterable<string>`. Custom providers contributed by third-party modules
+  must now yield chunks rather than return one concatenated string. This is
+  the change that lets the generator stream to disk with bounded memory.
+* **`/llms-full.txt` now serves a genuinely-different file** (full sanitized
+  descriptions inline). Previously, this URL silently aliased to `/llms.txt`,
+  which was misleading.
+* **llms.txt header is now spec-compliant.** A single blockquote summary line,
+  with currency / locale / base-URL moved to a plain markdown paragraph below.
+  The 2.x output used four blockquote lines, which broke llmstxt.org-spec
+  parsers.
+* **Status tracking moved** out of `core_config_data` and into
+  `var/angeo_llms/status.json`. Old status rows under `angeo_llms/status/*`
+  are no longer read. Drop them via `bin/magento config:set --lock-env angeo_llms/status/... ""` if you want a clean state, but it's harmless to leave them.
+* **`media/llms/` is no longer used** as the file output directory; output now
+  lives under `media/angeo/llms/`. Old files can be deleted; remove any reverse-proxy rewrites pointing at the old path.
+* **Admin "Generate" action moved to POST + CSRF**. If you have any external
+  tooling that hit the old GET URL, switch to the CLI command instead.
+* **Module namespace unchanged**: still `Angeo\LlmsTxt`. Composer package
+  name unchanged.
 
 ### Added
-- `Model/Config.php` — central config helper with `isEnabled()` and `isStoreExcluded()` methods
-- Store-level **Exclude This Store** setting in admin (`Stores → Configuration → Angeo → LLMs.txt`)
-- Global **Enabled** toggle now respected in CLI command, cron, generator, and controller
-- Stale file cleanup — disabled or excluded stores have their generated files deleted on next generation run
-- `Cron`: fixes admin URL being generated instead of frontend URL when cron runs
-- `Controller`: immediate 404 if module is disabled, store is inactive, or store is excluded in config
 
-### Fixed
-- `getLocaleCode()` returning `null` — replaced with `ScopeConfigInterface::getValue('general/locale/code')` scoped to store
-- Locale format normalized to BCP 47 (`en-US`) instead of Magento's internal `en_US` format
-- `getBaseUrl()` returning admin URL in cron/CLI context — replaced with `getBaseUrl(URL_TYPE_WEB)`
-
----
-
-## [2.0.0] — 2025-04-01
-
-### Added
-- `bin/magento angeo:llms:generate` CLI command with `--store`, `--no-jsonl`, `--no-llms` options
-- `AbstractGenerator` — shared base class eliminating duplicate code between `LlmsGenerator` and `JsonlGenerator`
-- Single `ProviderInterface` — replaces two identical interfaces from v1
-- Per-store exception safety — one failing store no longer blocks others; errors are logged
-- Files moved to `pub/media/angeo/llms/` and served via PHP controller (no direct web access to media dir)
-- Admin config: product limit, JSONL toggle, per-store settings
-
-### Fixed
-- JSONL providers: `json_encode()` was called after `foreach` — only the last item was encoded, all others silently dropped
-- `Cron` namespace triple-nested (`LlmsTxt\LlmsTxt\LlmsTxt\Cron`) — caused PHP fatal error on every cron run
-- `$output` initialized before store loop — store N's file contained merged content from stores 1…N
-- `Jsonl\CategoryProvider` missing root category filter — returned system categories (ID 1, 2) and categories from all store views
+* **Page Builder element filter** with four strategies — *preserve*, *exclude*,
+  *allow*, *strip* — driven by the element's `data-content-type` attribute.
+  Default list of excluded types drops common visual-only elements
+  (products carousel, banner, slider, video, map, buttons, block,
+  dynamic-block, divider, spacer) so the output focuses on semantic text.
+  Configurable per-store at *Stores → Configuration → Angeo → LLMs.txt →
+  Content Sanitization*.
+* **Streaming generation** via PHP generators. Memory stays bounded at one
+  collection page (default 1000 products) regardless of catalog size.
+* **Atomic writes**: each file is written to `.tmp`, then renamed. Readers
+  never see a half-written file. Generation locks via a separate `.lock` file
+  with `flock(LOCK_EX | LOCK_NB)`, so concurrent runs cannot corrupt output.
+* **Cursor pagination** by `entity_id ASC > $lastId` instead of skip/limit, so
+  products inserted mid-run can neither be duplicated nor skipped.
+* **Batch URL resolver** loads every URL rewrite for a store in one query
+  (vs. the per-product `getProductUrl()` query that 2.x triggered N times).
+* **Real `llms-full.txt`** with full sanitized descriptions inline.
+* **`/{url_key}.md` mirrors** — every product, category, and CMS page exposes
+  a clean Markdown rendering at its URL with `.md` appended. Generated on the
+  fly; no extra disk storage.
+* **CMS directive resolution** — `{{widget}}`, `{{block}}`, `{{var}}`, and
+  `{{store}}` directives are now rendered via Magento's standard frontend
+  filter before being stripped, instead of leaking as literal text.
+* **Customer-group-aware pricing** — admin can choose which customer group's
+  final price (with special-price and group-price applied) gets exposed.
+* **HTTP caching** — `ETag`, `Last-Modified`, `Cache-Control: public, max-age=`,
+  `X-Robots-Tag: noindex, follow`, and 304 responses on conditional GETs.
+* **Async admin action** — *Schedule (Async)* inserts a `cron_schedule` row for
+  the next tick so admins don't have to wait through a synchronous generation.
+* **Live admin status panel** polling `/angeo_llms/status/index` every 60s.
+* **Three CLI commands**:
+    * `bin/magento angeo:llms:generate [--store=…] [--no-jsonl] [--no-llms] [--no-full]`
+    * `bin/magento angeo:llms:status`
+    * `bin/magento angeo:llms:validate [--store=…]`
+* **JSONL JSON-Schema** at `etc/jsonl-schema.json` for downstream pipelines.
+* **Events**: `angeo_llms_generation_before`, `angeo_llms_generation_after`,
+  `angeo_llms_generation_failed` — for custom hooks.
+* **PHPUnit test suite** under `Test/Unit/`.
 
 ### Changed
-- Output format now follows [llmstxt.org](https://llmstxt.org) spec: H1 title, `##` sections, markdown links
-- Files relocated from `pub/media/` to `pub/media/angeo/llms/`
+
+* `frontend_default_meta_description` is now the fallback for the store
+  summary, before falling back to the generic stub.
+* Multi-store store-code routing handles the last URL path segment, so
+  `/de/llms.txt` works on path-based stores.
+* Spec compliance: products go under `## Optional` by default (admin
+  toggleable) so context-budget-constrained clients can drop them.
+* Out-of-stock products excluded by an explicit `StockRegistry` lookup
+  (configurable).
+* Logger context is now structured: every log line is prefixed
+  `[Angeo LlmsTxt]` and includes store/format keys.
+
+### Fixed
+
+* **Pseudo-locking** in 2.x: a `'w'` open truncates the file before the
+  `flock()` call, so two concurrent generations both saw an empty file and
+  the last writer won unpredictably. 3.0 uses a separate `.lock` file.
+* **CSRF-exposed admin generate**: 2.x used a GET URL; 3.0 requires POST with
+  the form key.
+* **Synchronous admin "Generate" timing out** on large catalogs (now async option).
+* **N+1 URL rewrite queries**: now batched.
+* **Literal `{{widget}}` text** appearing in 2.x output: now resolved.
+* **Stale files** for stores that became inactive or excluded: now cleaned up
+  on every generation run.
+
+### Removed
+
+* `media/llms/` legacy directory (see breaking-changes notes).
+* GET endpoint for admin generation.
+* Documented-but-non-existent config fields from 2.x README.
 
 ---
 
-## [1.0.0] — 2025-01-01
+## [2.1.4] — Pre-rebuild baseline
 
-### Added
-- Initial release
-- Basic `llms.txt` and JSONL generation for Magento 2 stores
-- Cron-based daily generation
-- Admin UI generation button
+Last release in the 2.x line. See the architectural review document for
+the issues that motivated 3.0.0.

@@ -5,7 +5,51 @@
         <angeo_llms>
             <general>
                 <enabled>1</enabled>
+                <exclude_store>0</exclude_store>
+                <store_summary></store_summary>
             </general>
+            <content>
+                <include_categories>1</include_categories>
+                <include_cms>1</include_cms>
+                <include_products>1</include_products>
+                <products_under_optional>1</products_under_optional>
+                <product_limit>5000</product_limit>
+                <exclude_out_of_stock>0</exclude_out_of_stock>
+                <cms_exclude_identifiers>no-route,enable-cookies,privacy-policy-cookie-restriction-mode</cms_exclude_identifiers>
+                <customer_group_id>0</customer_group_id>
+            </content>
+            <formats>
+                <generate_llms_txt>1</generate_llms_txt>
+                <generate_llms_full_txt>0</generate_llms_full_txt>
+                <generate_jsonl>1</generate_jsonl>
+                <generate_md_mirror>0</generate_md_mirror>
+            </formats>
+            <sanitizer>
+                <resolve_directives>1</resolve_directives>
+                <page_builder_strategy>exclude</page_builder_strategy>
+                <page_builder_excluded_types>products,banner,slider,slide,video,map,buttons,button-item,block,dynamic-block,divider,spacer</page_builder_excluded_types>
+                <page_builder_allowed_types>text,heading,html,tabs,tab-item,row,column,column-group</page_builder_allowed_types>
+            </sanitizer>
+            <performance>
+                <collection_page_size>1000</collection_page_size>
+            </performance>
+            <http>
+                <cache_ttl_seconds>3600</cache_ttl_seconds>
+            </http>
+            <cron>
+                <schedule>0 2 * * *</schedule>
+            </cron>
         </angeo_llms>
+        <crontab>
+            <default>
+                <jobs>
+                    <angeo_llms_generate>
+                        <schedule>
+                            <cron_expr>0 2 * * *</cron_expr>
+                        </schedule>
+                    </angeo_llms_generate>
+                </jobs>
+            </default>
+        </crontab>
     </default>
 </config>

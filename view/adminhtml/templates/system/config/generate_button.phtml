@@ -1,0 +1,30 @@
+<?php
+/**
+ * Generate button — POST form with CSRF protection.
+ *
+ * @var \Angeo\LlmsTxt\Block\Adminhtml\System\Config\GenerateButton $block
+ */
+declare(strict_types=1);
+?>
+<div class="angeo-llms-actions" style="display:flex; gap: 12px; align-items:center; flex-wrap: wrap;">
+    <form method="POST" action="<?= $block->escapeUrl($block->getGenerateNowUrl()) ?>" style="display:inline;">
+        <input type="hidden" name="form_key" value="<?= $block->escapeHtml($block->getFormKey()) ?>"/>
+        <button type="submit" class="action-default scalable primary">
+            <span><?= /* @noEscape */ __('Generate Now') ?></span>
+        </button>
+    </form>
+
+    <form method="POST" action="<?= $block->escapeUrl($block->getScheduleUrl()) ?>" style="display:inline;">
+        <input type="hidden" name="form_key" value="<?= $block->escapeHtml($block->getFormKey()) ?>"/>
+        <button type="submit" class="action-default scalable">
+            <span><?= /* @noEscape */ __('Schedule (Async)') ?></span>
+        </button>
+    </form>
+
+    <p class="note" style="margin: 0;">
+        <span>
+            <?= /* @noEscape */ __('"Generate Now" runs synchronously — suitable for small/medium catalogs.') ?><br/>
+            <?= /* @noEscape */ __('"Schedule (Async)" queues an immediate cron run — recommended for large catalogs.') ?>
+        </span>
+    </p>
+</div>

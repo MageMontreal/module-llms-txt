@@ -3,9 +3,9 @@
         xsi:noNamespaceSchemaLocation="urn:magento:framework:Module/etc/crontab.xsd">
     <group id="default">
         <job name="angeo_llms_generate"
-             instance="Angeo\LlmsTxt\Cron\LlmsGeneratorCron"
+             instance="Angeo\LlmsTxt\Cron\GenerateLlmsFiles"
              method="execute">
-            <schedule>0 2 * * *</schedule>
+            <config_path>angeo_llms/cron/schedule</config_path>
         </job>
     </group>
 </config>

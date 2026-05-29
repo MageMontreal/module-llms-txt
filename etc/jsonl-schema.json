@@ -1,0 +1,30 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://angeo.dev/schema/llms-txt/jsonl/3.0.0.json",
+    "title": "Angeo LLMs.txt JSONL Record",
+    "description": "One record per line in llms_{store}.jsonl. Used for vector indexing.",
+    "type": "object",
+    "required": ["entity_type", "entity_id", "store_code", "url", "embedding_text"],
+    "properties": {
+        "entity_type": {
+            "type": "string",
+            "enum": ["store", "category", "product", "cms_page"]
+        },
+        "entity_id":   { "type": "integer", "minimum": 0 },
+        "store_code":  { "type": "string", "minLength": 1 },
+        "store_name":  { "type": "string" },
+        "url":         { "type": "string", "format": "uri" },
+        "currency":    { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "locale":      { "type": "string" },
+        "sku":         { "type": "string" },
+        "name":        { "type": "string" },
+        "title":       { "type": "string" },
+        "identifier":  { "type": "string" },
+        "price":       { "type": "number", "minimum": 0 },
+        "short_description": { "type": "string" },
+        "description": { "type": "string" },
+        "content":     { "type": "string" },
+        "embedding_text": { "type": "string" }
+    },
+    "additionalProperties": false
+}

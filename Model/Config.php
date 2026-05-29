@@ -1,35 +1,101 @@
 <?php
-
+/**
+ * @package   Angeo_LlmsTxt
+ * @copyright Copyright (c) Angeo
+ * @license   MIT
+ */
 declare(strict_types=1);
 
 namespace Angeo\LlmsTxt\Model;
 
+use Magento\Customer\Model\Group as CustomerGroup;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Store\Api\Data\StoreInterface;
 use Magento\Store\Model\ScopeInterface;
+use Magento\Store\Model\Store;
 
 /**
- * Module configuration helper.
+ * Central configuration helper for Angeo_LlmsTxt.
+ *
+ * All config nodes live under the angeo_llms/* tree. Reads honour standard Magento
+ * scope inheritance (default → website → store) unless a specific scope is forced
+ * for a setting that only makes sense at that scope (e.g. exclude_store).
+ *
+ * @since 3.0.0
  */
 class Config
 {
-    private const XML_PATH_ENABLED         = 'angeo_llms/general/enabled';
-    private const XML_PATH_EXCLUDE_STORE   = 'angeo_llms/general/exclude_store';
+    // ─── General ───────────────────────────────────────────────────────────
+    public const XML_PATH_ENABLED            = 'angeo_llms/general/enabled';
+    public const XML_PATH_EXCLUDE_STORE      = 'angeo_llms/general/exclude_store';
+    public const XML_PATH_STORE_SUMMARY      = 'angeo_llms/general/store_summary';
+
+    // ─── Content ───────────────────────────────────────────────────────────
+    public const XML_PATH_INCLUDE_PRODUCTS   = 'angeo_llms/content/include_products';
+    public const XML_PATH_INCLUDE_CATEGORIES = 'angeo_llms/content/include_categories';
+    public const XML_PATH_INCLUDE_CMS        = 'angeo_llms/content/include_cms';
+    public const XML_PATH_PRODUCTS_OPTIONAL  = 'angeo_llms/content/products_under_optional';
+    public const XML_PATH_PRODUCT_LIMIT      = 'angeo_llms/content/product_limit';
+    public const XML_PATH_EXCLUDE_OOS        = 'angeo_llms/content/exclude_out_of_stock';
+    public const XML_PATH_CMS_EXCLUDE_IDS    = 'angeo_llms/content/cms_exclude_identifiers';
+    public const XML_PATH_CUSTOMER_GROUP     = 'angeo_llms/content/customer_group_id';
+
+    // ─── Formats ───────────────────────────────────────────────────────────
+    public const XML_PATH_GENERATE_LLMS      = 'angeo_llms/formats/generate_llms_txt';
+    public const XML_PATH_GENERATE_FULL      = 'angeo_llms/formats/generate_llms_full_txt';
+    public const XML_PATH_GENERATE_JSONL     = 'angeo_llms/formats/generate_jsonl';
+    public const XML_PATH_GENERATE_MD_MIRROR = 'angeo_llms/formats/generate_md_mirror';
+
+    // ─── Sanitizer ─────────────────────────────────────────────────────────
+    public const XML_PATH_RESOLVE_DIRECTIVES = 'angeo_llms/sanitizer/resolve_directives';
+    public const XML_PATH_PB_STRATEGY        = 'angeo_llms/sanitizer/page_builder_strategy';
+    public const XML_PATH_PB_EXCLUDED_TYPES  = 'angeo_llms/sanitizer/page_builder_excluded_types';
+    public const XML_PATH_PB_ALLOWED_TYPES   = 'angeo_llms/sanitizer/page_builder_allowed_types';
+
+    // ─── Performance ───────────────────────────────────────────────────────
+    public const XML_PATH_PAGE_SIZE          = 'angeo_llms/performance/collection_page_size';
+
+    // ─── HTTP ──────────────────────────────────────────────────────────────
+    public const XML_PATH_CACHE_TTL          = 'angeo_llms/http/cache_ttl_seconds';
+
+    // ─── Cron ──────────────────────────────────────────────────────────────
+    public const XML_PATH_CRON_SCHEDULE      = 'angeo_llms/cron/schedule';
+
+    /**
+     * Page Builder sanitization strategies for {@see getPageBuilderStrategy()}.
+     *
+     * PRESERVE — keep all Page Builder content (strip only the wrapper attributes).
+     * EXCLUDE  — drop the content-types listed in {@see getPageBuilderExcludedTypes()}.
+     * ALLOW    — drop everything EXCEPT the content-types in {@see getPageBuilderAllowedTypes()}.
+     * STRIP    — remove ALL elements that carry a data-content-type attribute.
+     */
+    public const PB_STRATEGY_PRESERVE = 'preserve';
+    public const PB_STRATEGY_EXCLUDE  = 'exclude';
+    public const PB_STRATEGY_ALLOW    = 'allow';
+    public const PB_STRATEGY_STRIP    = 'strip';
 
     public function __construct(
         private readonly ScopeConfigInterface $scopeConfig
-    ) {}
-
-    /**
-     * Is the module enabled globally?
-     */
-    public function isEnabled(): bool
-    {
-        return $this->scopeConfig->isSetFlag(self::XML_PATH_ENABLED);
+    ) {
     }
 
     /**
-     * Should this store be excluded from llms.txt / JSONL generation?
+     * Is the module enabled? Inherits default → website → store.
+     */
+    public function isEnabled(?StoreInterface $store = null): bool
+    {
+        return $this->scopeConfig->isSetFlag(
+            self::XML_PATH_ENABLED,
+            ScopeInterface::SCOPE_STORE,
+            $store?->getId()
+        );
+    }
+
+    /**
+     * Should the given store be excluded from generation?
+     *
+     * Reads at store scope but inherits website / default — so a merchant with 10
+     * store views per website can flip exclusion once at the website scope.
      */
     public function isStoreExcluded(StoreInterface $store): bool
     {
@@ -38,5 +104,216 @@ class Config
             ScopeInterface::SCOPE_STORE,
             $store->getId()
         );
+    }
+
+    public function getStoreSummary(StoreInterface $store): string
+    {
+        return trim((string) $this->scopeConfig->getValue(
+            self::XML_PATH_STORE_SUMMARY,
+            ScopeInterface::SCOPE_STORE,
+            $store->getId()
+        ));
+    }
+
+    public function isProductsIncluded(StoreInterface $store): bool
+    {
+        return $this->scopeConfig->isSetFlag(
+            self::XML_PATH_INCLUDE_PRODUCTS,
+            ScopeInterface::SCOPE_STORE,
+            $store->getId()
+        );
+    }
+
+    public function isCategoriesIncluded(StoreInterface $store): bool
+    {
+        return $this->scopeConfig->isSetFlag(
+            self::XML_PATH_INCLUDE_CATEGORIES,
+            ScopeInterface::SCOPE_STORE,
+            $store->getId()
+        );
+    }
+
+    public function isCmsIncluded(StoreInterface $store): bool
+    {
+        return $this->scopeConfig->isSetFlag(
+            self::XML_PATH_INCLUDE_CMS,
+            ScopeInterface::SCOPE_STORE,
+            $store->getId()
+        );
+    }
+
+    /**
+     * Whether the ## Products section should be placed under ## Optional (spec compliance).
+     */
+    public function areProductsUnderOptional(StoreInterface $store): bool
+    {
+        return $this->scopeConfig->isSetFlag(
+            self::XML_PATH_PRODUCTS_OPTIONAL,
+            ScopeInterface::SCOPE_STORE,
+            $store->getId()
+        );
+    }
+
+    /**
+     * Maximum products to include in the txt output. 0 = unlimited.
+     */
+    public function getProductLimit(StoreInterface $store): int
+    {
+        return max(0, (int) $this->scopeConfig->getValue(
+            self::XML_PATH_PRODUCT_LIMIT,
+            ScopeInterface::SCOPE_STORE,
+            $store->getId()
+        ));
+    }
+
+    public function isExcludeOutOfStock(StoreInterface $store): bool
+    {
+        return $this->scopeConfig->isSetFlag(
+            self::XML_PATH_EXCLUDE_OOS,
+            ScopeInterface::SCOPE_STORE,
+            $store->getId()
+        );
+    }
+
+    /**
+     * @return string[]  CMS page identifiers to skip.
+     */
+    public function getCmsExcludedIdentifiers(StoreInterface $store): array
+    {
+        $value = (string) $this->scopeConfig->getValue(
+            self::XML_PATH_CMS_EXCLUDE_IDS,
+            ScopeInterface::SCOPE_STORE,
+            $store->getId()
+        );
+
+        if ($value === '') {
+            return ['no-route', 'enable-cookies', 'privacy-policy-cookie-restriction-mode'];
+        }
+
+        return array_values(array_filter(array_map('trim', preg_split('/[,\n]/', $value) ?: [])));
+    }
+
+    public function getCustomerGroupId(StoreInterface $store): int
+    {
+        $value = $this->scopeConfig->getValue(
+            self::XML_PATH_CUSTOMER_GROUP,
+            ScopeInterface::SCOPE_STORE,
+            $store->getId()
+        );
+
+        return $value === null ? CustomerGroup::NOT_LOGGED_IN_ID : (int) $value;
+    }
+
+    public function isLlmsTxtEnabled(StoreInterface $store): bool
+    {
+        return $this->scopeConfig->isSetFlag(
+            self::XML_PATH_GENERATE_LLMS,
+            ScopeInterface::SCOPE_STORE,
+            $store->getId()
+        );
+    }
+
+    public function isLlmsFullTxtEnabled(StoreInterface $store): bool
+    {
+        return $this->scopeConfig->isSetFlag(
+            self::XML_PATH_GENERATE_FULL,
+            ScopeInterface::SCOPE_STORE,
+            $store->getId()
+        );
+    }
+
+    public function isJsonlEnabled(StoreInterface $store): bool
+    {
+        return $this->scopeConfig->isSetFlag(
+            self::XML_PATH_GENERATE_JSONL,
+            ScopeInterface::SCOPE_STORE,
+            $store->getId()
+        );
+    }
+
+    public function isMdMirrorEnabled(StoreInterface $store): bool
+    {
+        return $this->scopeConfig->isSetFlag(
+            self::XML_PATH_GENERATE_MD_MIRROR,
+            ScopeInterface::SCOPE_STORE,
+            $store->getId()
+        );
+    }
+
+    public function shouldResolveDirectives(StoreInterface $store): bool
+    {
+        return $this->scopeConfig->isSetFlag(
+            self::XML_PATH_RESOLVE_DIRECTIVES,
+            ScopeInterface::SCOPE_STORE,
+            $store->getId()
+        );
+    }
+
+    public function getPageBuilderStrategy(StoreInterface $store): string
+    {
+        $value = (string) $this->scopeConfig->getValue(
+            self::XML_PATH_PB_STRATEGY,
+            ScopeInterface::SCOPE_STORE,
+            $store->getId()
+        );
+
+        return $value !== '' ? $value : self::PB_STRATEGY_PRESERVE;
+    }
+
+    /**
+     * @return string[]  data-content-type values to drop when strategy = EXCLUDE.
+     */
+    public function getPageBuilderExcludedTypes(StoreInterface $store): array
+    {
+        return $this->parseCsv((string) $this->scopeConfig->getValue(
+            self::XML_PATH_PB_EXCLUDED_TYPES,
+            ScopeInterface::SCOPE_STORE,
+            $store->getId()
+        ));
+    }
+
+    /**
+     * @return string[]  data-content-type values to keep when strategy = ALLOW.
+     */
+    public function getPageBuilderAllowedTypes(StoreInterface $store): array
+    {
+        return $this->parseCsv((string) $this->scopeConfig->getValue(
+            self::XML_PATH_PB_ALLOWED_TYPES,
+            ScopeInterface::SCOPE_STORE,
+            $store->getId()
+        ));
+    }
+
+    public function getCollectionPageSize(StoreInterface $store): int
+    {
+        $size = (int) $this->scopeConfig->getValue(
+            self::XML_PATH_PAGE_SIZE,
+            ScopeInterface::SCOPE_STORE,
+            $store->getId()
+        );
+
+        return $size > 0 ? $size : 1000;
+    }
+
+    public function getHttpCacheTtl(): int
+    {
+        $ttl = (int) $this->scopeConfig->getValue(self::XML_PATH_CACHE_TTL);
+        return $ttl > 0 ? $ttl : 3600;
+    }
+
+    /**
+     * Resolve store ID safely, defaulting to ADMIN_STORE_ID for global checks.
+     */
+    public function getDefaultStoreScopeId(): int
+    {
+        return Store::DEFAULT_STORE_ID;
+    }
+
+    private function parseCsv(string $value): array
+    {
+        if ($value === '') {
+            return [];
+        }
+        return array_values(array_filter(array_map('trim', preg_split('/[,\n]/', $value) ?: [])));
     }
 }

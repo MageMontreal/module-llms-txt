@@ -1,174 +1,256 @@
-# Angeo LLMs.txt — Magento 2
+# Angeo LLMs.txt — Magento 2 Module
 
-[![Packagist](https://img.shields.io/packagist/v/angeo/module-llms-txt.svg)](https://packagist.org/packages/angeo/module-llms-txt)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![PHP](https://img.shields.io/badge/php-%3E%3D8.1-8892BF.svg)](https://php.net)
+**AI Engine Optimization (AEO) for Magento 2 / Adobe Commerce.** Generates
+spec-compliant `llms.txt`, `llms-full.txt`, and JSONL files so ChatGPT,
+Claude, Gemini, Perplexity, and other LLM-powered crawlers can ingest your
+catalog efficiently.
 
-**Generates spec-compliant `llms.txt` and JSONL files for ChatGPT, Claude, Gemini, and Perplexity AI visibility.**
+[![Magento](https://img.shields.io/badge/Magento-2.4.7%2B-orange)]()
+[![PHP](https://img.shields.io/badge/PHP-8.2%20%7C%208.3%20%7C%208.4-blue)]()
+[![License](https://img.shields.io/badge/license-MIT-green)]()
 
-Part of the **[Angeo AI Commerce Suite](https://packagist.org/packages/angeo/)** — open-source Magento 2 modules for AI Engine Optimization (AEO).  
-GitHub: [github.com/angeo-dev](https://github.com/angeo-dev) · Website: [angeo.dev](https://angeo.dev)
+---
+
+## What this module does
+
+After install, your storefront serves:
+
+| URL                          | What it is                                         |
+| :--------------------------- | :------------------------------------------------- |
+| `https://shop/llms.txt`      | Spec-compliant llmstxt.org file (compact markdown) |
+| `https://shop/llms-full.txt` | Same structure, full sanitized descriptions inline |
+| `https://shop/llms.jsonl`    | One JSON record per line, for vector indexing      |
+| `https://shop/{url-key}.md`  | On-the-fly Markdown mirror of any product/category/CMS page |
+
+Generation happens via cron (daily by default), CLI, or the admin "Generate
+Now" button. The output is streamed to disk with bounded memory, atomically
+renamed on completion, and served with proper `ETag` / `Cache-Control` headers.
+
+---
+
+## Why this module exists
+
+LLM crawlers can ingest a typical Magento storefront — full theme, JS, image
+sprites, navigation chrome — but that's wasteful for everyone. The
+[llmstxt.org](https://llmstxt.org) standard defines a clean text format
+optimized for AI ingestion: stable links, structured headings, descriptions
+in their natural prose form rather than buried in product cards.
+
+This module produces that format for Magento, with care taken for the things
+Magento makes hard: multi-store layout, Page Builder content, CMS directive
+resolution, customer-group pricing, and very large catalogs.
 
 ---
 
 ## Installation
 
 ```bash
-composer require angeo/module-llms-txt
+composer require angeo/module-llms-txt:^3.0
+bin/magento module:enable Angeo_LlmsTxt
 bin/magento setup:upgrade
+bin/magento setup:di:compile      # only in production mode
+bin/magento setup:static-content:deploy adminhtml   # only in production mode
 bin/magento cache:flush
 ```
 
----
-
-## Usage
-
-### CLI
+Then generate your first batch:
 
 ```bash
-# Generate for all active stores
 bin/magento angeo:llms:generate
-
-# Generate for a specific store
-bin/magento angeo:llms:generate --store=en_us
-
-# Skip JSONL (llms.txt only)
-bin/magento angeo:llms:generate --no-jsonl
-
-# Skip llms.txt (JSONL only)
-bin/magento angeo:llms:generate --no-llms
 ```
 
-### Admin UI
+Visit `https://your-store.tld/llms.txt`.
 
-**Stores → Configuration → Angeo → LLMs.txt** → click **Generate Now**.
+---
+
+## Configuration reference
+
+All settings live at **Stores → Configuration → Angeo → LLMs.txt**.
+
+### General
+
+| Field             | Default | Notes                                                             |
+| :---------------- | :------ | :---------------------------------------------------------------- |
+| **Enable**        | Yes     | Master switch.                                                    |
+| **Exclude This Scope** | No | Available at website + store scope. Skips generation for this scope. |
+| **Store Summary** | —       | One-line summary used as the spec-compliant blockquote. If empty, falls back to *Design → HTML Head → Default Description*. |
+
+### Content
+
+| Field                                | Default | Notes                                                  |
+| :----------------------------------- | :------ | :----------------------------------------------------- |
+| **Include Categories**               | Yes     |                                                        |
+| **Include CMS Pages**                | Yes     |                                                        |
+| **Include Products**                 | Yes     |                                                        |
+| **Products under `## Optional`**     | Yes     | Recommended. Lets context-budget-constrained AI clients drop products without losing categories / pages. |
+| **Product Limit**                    | 5000    | 0 = unlimited.                                         |
+| **Exclude Out-of-Stock Products**    | No      |                                                        |
+| **CMS Identifiers to Exclude**       | `no-route, enable-cookies, privacy-policy-cookie-restriction-mode` | Comma- or newline-separated. |
+| **Customer Group for Pricing**       | NOT LOGGED IN | Which group's final price (with special / group prices) is exposed. |
+
+### Output formats
+
+| Field                          | Default | Notes                                                 |
+| :----------------------------- | :------ | :---------------------------------------------------- |
+| **Generate llms.txt**          | Yes     |                                                       |
+| **Generate llms-full.txt**     | No      | 5–50× larger; enable only if you actually want it.    |
+| **Generate JSONL**             | Yes     | One record per line; embeds-ready.                    |
+| **Serve `/url-key.md` Mirrors**| No      | Per-entity Markdown rendering; on-the-fly, no disk.   |
+
+### Content sanitization
+
+| Field                            | Default | Notes                                                 |
+| :------------------------------- | :------ | :---------------------------------------------------- |
+| **Resolve CMS Directives**       | Yes     | Renders `{{widget}}`, `{{block}}`, `{{var}}` via Magento's frontend filter. |
+| **Page Builder Strategy**        | Exclude | See below.                                            |
+| **Excluded Content-Types**       | `products, banner, slider, slide, video, map, buttons, button-item, block, dynamic-block, divider, spacer` | Used under *Exclude* strategy. |
+| **Allowed Content-Types**        | `text, heading, html, tabs, tab-item, row, column, column-group` | Used under *Allow* strategy. |
+
+#### Page Builder strategies
+
+| Strategy | Effect                                                                   |
+| :------- | :------------------------------------------------------------------------ |
+| **Preserve** | Keep all Page Builder content; only strip wrapper attributes.        |
+| **Exclude**  | Drop elements whose `data-content-type` is in the excluded list. **Default.** |
+| **Allow**    | Drop everything EXCEPT `data-content-type` in the allowed list.       |
+| **Strip**    | Drop ALL elements that carry a `data-content-type` attribute.         |
+
+The filter parses content with `DOMDocument` (not regex), so nested Page
+Builder containers are handled correctly. Known content-types include:
+`row`, `column-group`, `column`, `tabs`, `tab-item`, `text`, `heading`,
+`html`, `image`, `video`, `map`, `divider`, `spacer`, `buttons`, `button-item`,
+`banner`, `slider`, `slide`, `products`, `block`, `dynamic-block`.
+
+### Performance
+
+| Field                       | Default | Notes                                                   |
+| :-------------------------- | :------ | :------------------------------------------------------ |
+| **Collection Page Size**    | 1000    | Lower if hitting memory limits on shared hosting.       |
+
+### HTTP caching
+
+| Field                       | Default | Notes                                                   |
+| :-------------------------- | :------ | :------------------------------------------------------ |
+| **Cache-Control TTL (s)**   | 3600    | Sent as `public, max-age=…` on the served files.        |
 
 ### Cron
 
-Runs automatically every day at 02:00 server time. Each store is emulated in `AREA_FRONTEND` context so that URLs and locale always resolve to correct frontend values.
+| Field                | Default        | Notes                                                  |
+| :------------------- | :------------- | :----------------------------------------------------- |
+| **Cron Expression**  | `0 2 * * *`    | Daily at 02:00 server time.                            |
+
+---
+
+## CLI commands
 
 ```bash
-bin/magento cron:run --group=default
+# Generate everything for all eligible stores
+bin/magento angeo:llms:generate
+
+# Single store, skip JSONL
+bin/magento angeo:llms:generate --store=default --no-jsonl
+
+# Per-store/per-format last-run status
+bin/magento angeo:llms:status
+
+# Lint generated files for spec compliance
+bin/magento angeo:llms:validate
 ```
 
 ---
 
-## Generated files
+## Extending — custom providers
 
-Files are written to `pub/media/angeo/llms/` and served via a PHP controller:
+Drop a new section into `llms.txt` (e.g. a "Brands" list, a "Recent Posts"
+section, etc.) by implementing `Angeo\LlmsTxt\Api\ProviderInterface` and
+registering it via `di.xml`.
 
-| URL | File |
-|-----|------|
-| `yourstore.com/llms.txt` | `pub/media/angeo/llms/llms_default.txt` |
-| `yourstore.com/llms.jsonl` | `pub/media/angeo/llms/llms_default.jsonl` |
+```php
+namespace Vendor\Module\Provider\Llms;
 
-Multi-store: each store gets its own file (`llms_en_us.txt`, `llms_de.txt`, etc.) served at the store's base URL.
+use Angeo\LlmsTxt\Api\OutputContextInterface;
+use Angeo\LlmsTxt\Model\Provider\AbstractProvider;
 
----
-
-## llms.txt format
-
-Output follows the [llmstxt.org](https://llmstxt.org) spec — H1 title, metadata block, `##` sections with markdown links:
-
+class BrandsProvider extends AbstractProvider
+{
+    public function provide(OutputContextInterface $context): iterable
+    {
+        yield "## Brands\n\n";
+        foreach ($this->brandRepo->getList($context->getStore()->getId()) as $brand) {
+            $label = $this->escapeMarkdown($brand->getName());
+            yield "- [{$label}]({$brand->getUrl()})\n";
+        }
+        yield "\n";
+    }
+}
 ```
-# My Store
-
-> Store URL: https://mystore.com
-> Currency: USD
-> Locale: en-US
-
-## Categories
-
-- [All products](https://mystore.com/all-products.html)
-- [Sale](https://mystore.com/sale.html)
-
-## Products
-
-- [Product name](https://mystore.com/product.html): 99.00 USD
-
-## Pages
-
-- [About us](https://mystore.com/about): About page description.
-```
-
----
-
-## Configuration
-
-**Stores → Configuration → Angeo → LLMs.txt**
-
-| Setting | Scope | Description | Default |
-|---------|-------|-------------|---------|
-| Enabled | Global | Enable/disable the module | Yes |
-| Exclude This Store | Store View | Skip this store from generation | No |
-| Include Products | Store View | Add `## Products` section | Yes |
-| Include Categories | Store View | Add `## Categories` section | Yes |
-| Include CMS Pages | Store View | Add `## Pages` section | Yes |
-| Generate JSONL | Store View | Also generate `.jsonl` file | Yes |
-| Product limit | Store View | Max products (0 = unlimited) | 5000 |
-
----
-
-## Extending with custom providers
-
-Register additional content sections via `di.xml`:
 
 ```xml
-<type name="Angeo\LlmsTxt\Model\LlmsGenerator">
+<!-- etc/di.xml -->
+<type name="Angeo\LlmsTxt\Model\Generator\LlmsTxtGenerator">
     <arguments>
         <argument name="providers" xsi:type="array">
-            <item name="my_custom" xsi:type="object">Vendor\Module\Model\Llms\Providers\MyProvider</item>
+            <item name="brands" xsi:type="object">Vendor\Module\Provider\Llms\BrandsProvider</item>
         </argument>
     </arguments>
 </type>
 ```
 
-Implement `Angeo\LlmsTxt\Api\ProviderInterface`:
+The base class gives you `escapeMarkdown()`, `encodeJsonl()`, `isJsonl()`,
+`isFullTxt()`, and `isApplicable()` overridable to opt out per-format.
 
-```php
-public function provide(StoreInterface $store): string
-{
-    return "## My Section\n\n- [Item](url): description\n\n";
-}
+---
+
+## Extending — custom sanitizer filters
+
+Insert your own filter between Page Builder and HTML stripping (e.g. to
+remove `<script>` data attributes, redact phone numbers, etc.) by implementing
+`Angeo\LlmsTxt\Api\SanitizerFilterInterface` and re-declaring the pipeline
+in `di.xml`.
+
+```xml
+<type name="Angeo\LlmsTxt\Model\Sanitizer\Sanitizer">
+    <arguments>
+        <argument name="filters" xsi:type="array">
+            <item name="cms_directive" xsi:type="object">Angeo\LlmsTxt\Model\Sanitizer\Filter\CmsDirectiveFilter</item>
+            <item name="page_builder"  xsi:type="object">Angeo\LlmsTxt\Model\Sanitizer\Filter\PageBuilderFilter</item>
+            <item name="redact_pii"    xsi:type="object">Vendor\Module\Sanitizer\Filter\PiiRedactionFilter</item>
+            <item name="html"          xsi:type="object">Angeo\LlmsTxt\Model\Sanitizer\Filter\HtmlFilter</item>
+            <item name="whitespace"    xsi:type="object">Angeo\LlmsTxt\Model\Sanitizer\Filter\WhitespaceFilter</item>
+        </argument>
+    </arguments>
+</type>
 ```
 
 ---
 
-## Testing
+## Events
 
-```bash
-vendor/bin/phpunit -c app/code/Angeo/LlmsTxt/phpunit.xml
-```
+Hook in via observers — three events are dispatched per store/format pass:
 
----
-
-## The Angeo AI Commerce Suite
-
-Free, MIT-licensed Magento 2 modules — [packagist.org/packages/angeo](https://packagist.org/packages/angeo/) · [github.com/angeo-dev](https://github.com/angeo-dev)
-
-| Module | Packagist | Purpose |
-|--------|-----------|---------|
-| `angeo/module-aeo-audit` | [↗](https://packagist.org/packages/angeo/module-aeo-audit) | CLI AEO audit — 8 signals scored |
-| `angeo/module-llms-txt` | [↗](https://packagist.org/packages/angeo/module-llms-txt) | **This module** — llms.txt + JSONL generator |
-| `angeo/module-openai-product-feed` | [↗](https://packagist.org/packages/angeo/module-openai-product-feed) | ChatGPT Shopping CSV product feed |
-| `angeo/module-openai-product-feed-api` | [↗](https://packagist.org/packages/angeo/module-openai-product-feed-api) | ACP REST API — 6 endpoints |
-| `angeo/module-rich-data` | [↗](https://packagist.org/packages/angeo/module-rich-data) | JSON-LD schema — Product, Organization, FAQ, Breadcrumb |
-
-Install the full suite:
-
-```bash
-composer require angeo/module-aeo-audit angeo/module-llms-txt angeo/module-openai-product-feed angeo/module-openai-product-feed-api angeo/module-rich-data
-bin/magento setup:upgrade && bin/magento cache:flush
-```
+| Event                              | Data                                              |
+| :--------------------------------- | :------------------------------------------------ |
+| `angeo_llms_generation_before`     | `store`, `format`, `context`                      |
+| `angeo_llms_generation_after`      | `store`, `format`, `file`, `bytes`, `items`, `duration` |
+| `angeo_llms_generation_failed`     | `store`, `format`, `error`                        |
 
 ---
 
-## Changelog
+## Migrating from 2.x
 
-See [CHANGELOG.md](CHANGELOG.md).
+* Old files in `media/llms/` can be deleted (output now lives in `media/angeo/llms/`).
+* Any custom `ProviderInterface` implementations must change from returning a `string` to yielding `iterable<string>`. See *Extending — custom providers*.
+* Drop any reverse-proxy / Nginx rewrites pointing at the old paths.
+* Re-run *Stores → Configuration → Angeo → LLMs.txt* to set the new fields (Page Builder strategy, customer group, etc.).
+* External tooling that called the GET `/admin/angeo_llms/generate/index` URL must switch to the CLI command (the admin endpoint is now POST + CSRF).
 
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+MIT — see [LICENSE](./LICENSE).
+
+## Support
+
+* GitHub Issues: <https://github.com/angeo-dev/module-llms-txt/issues>
+* Email: <support@angeo.dev>

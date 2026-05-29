@@ -7,7 +7,13 @@
                 <resource id="Magento_Backend::stores">
                     <resource id="Magento_Backend::stores_settings">
                         <resource id="Magento_Config::config">
-                            <resource id="Angeo_LlmsTxt::config" title="Angeo — LLMs.txt Configuration" sortOrder="10"/>
+                            <resource id="Angeo_LlmsTxt::config"
+                                      title="Angeo — LLMs.txt Configuration"
+                                      sortOrder="10">
+                                <resource id="Angeo_LlmsTxt::generate"
+                                          title="Angeo — Generate LLMs Files"
+                                          sortOrder="20"/>
+                            </resource>
                         </resource>
                     </resource>
                 </resource>

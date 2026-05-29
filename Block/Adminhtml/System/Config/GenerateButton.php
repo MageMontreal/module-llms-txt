@@ -1,5 +1,9 @@
 <?php
-
+/**
+ * @package   Angeo_LlmsTxt
+ * @copyright Copyright (c) Angeo
+ * @license   MIT
+ */
 declare(strict_types=1);
 
 namespace Angeo\LlmsTxt\Block\Adminhtml\System\Config;
@@ -7,17 +11,33 @@ namespace Angeo\LlmsTxt\Block\Adminhtml\System\Config;
 use Magento\Config\Block\System\Config\Form\Field;
 use Magento\Framework\Data\Form\Element\AbstractElement;
 
+/**
+ * Renders the "Generate Now" + "Schedule (Async)" buttons inside the system config form.
+ *
+ * Both buttons submit POST requests with the form_key so Magento's standard CSRF
+ * checks apply. The form key is provided by the parent {@see \Magento\Backend\Block\Template}
+ * — no extra injection needed; we just expose it via getFormKey() which is already
+ * defined on the parent and used here via the .phtml template.
+ *
+ * @since 3.0.0
+ */
 class GenerateButton extends Field
 {
+    /** @var string */
+    protected $_template = 'Angeo_LlmsTxt::system/config/generate_button.phtml';
+
     protected function _getElementHtml(AbstractElement $element): string
     {
-        $url = $this->getUrl('angeo_llms/generate');
-        return sprintf(
-            '<button type="button" onclick="setLocation(\'%s\')" class="scalable save primary">%s</button>
-             <p class="note"><span>%s</span></p>',
-            $url,
-            __('Generate llms.txt + JSONL'),
-            __('Generates files for all active stores. Files are served at yourstore.com/llms.txt')
-        );
+        return $this->toHtml();
+    }
+
+    public function getGenerateNowUrl(): string
+    {
+        return $this->getUrl('angeo_llms/generate/index');
+    }
+
+    public function getScheduleUrl(): string
+    {
+        return $this->getUrl('angeo_llms/generate/schedule');
     }
 }

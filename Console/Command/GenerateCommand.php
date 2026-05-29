@@ -1,29 +1,38 @@
 <?php
-
+/**
+ * @package   Angeo_LlmsTxt
+ * @copyright Copyright (c) Angeo
+ * @license   MIT
+ */
 declare(strict_types=1);
 
 namespace Angeo\LlmsTxt\Console\Command;
 
 use Angeo\LlmsTxt\Model\Config;
-use Angeo\LlmsTxt\Model\JsonlGenerator;
-use Angeo\LlmsTxt\Model\LlmsGenerator;
-use Magento\Store\Model\StoreManagerInterface;
+use Angeo\LlmsTxt\Model\Generator\GenerationSummary;
+use Angeo\LlmsTxt\Service\GenerationService;
+use Magento\Framework\App\State;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
+/**
+ * `bin/magento angeo:llms:generate [--store=...] [--no-jsonl] [--no-llms] [--no-full]`
+ *
+ * @since 3.0.0
+ */
 class GenerateCommand extends Command
 {
-    private const OPT_STORE    = 'store';
+    private const OPT_STORE   = 'store';
     private const OPT_NO_JSONL = 'no-jsonl';
     private const OPT_NO_LLMS  = 'no-llms';
+    private const OPT_NO_FULL  = 'no-full';
 
     public function __construct(
-        private readonly LlmsGenerator         $llmsGenerator,
-        private readonly JsonlGenerator        $jsonlGenerator,
-        private readonly StoreManagerInterface $storeManager,
-        private readonly Config                $config,
+        private readonly GenerationService $generationService,
+        private readonly Config $config,
+        private readonly State $appState
     ) {
         parent::__construct();
     }
@@ -31,20 +40,24 @@ class GenerateCommand extends Command
     protected function configure(): void
     {
         $this->setName('angeo:llms:generate')
-            ->setDescription('Generate llms.txt and JSONL files for AI engine optimization.')
-            ->addOption(self::OPT_STORE,    's', InputOption::VALUE_OPTIONAL, 'Store code to generate for (default: all active stores)')
-            ->addOption(self::OPT_NO_JSONL, null, InputOption::VALUE_NONE,   'Skip JSONL generation')
-            ->addOption(self::OPT_NO_LLMS,  null, InputOption::VALUE_NONE,   'Skip llms.txt generation');
+            ->setDescription('Generate llms.txt, llms-full.txt, and JSONL files.')
+            ->addOption(self::OPT_STORE,    's', InputOption::VALUE_OPTIONAL, 'Store code (default: all eligible stores)')
+            ->addOption(self::OPT_NO_JSONL, null, InputOption::VALUE_NONE,    'Skip JSONL generation')
+            ->addOption(self::OPT_NO_LLMS,  null, InputOption::VALUE_NONE,    'Skip llms.txt generation')
+            ->addOption(self::OPT_NO_FULL,  null, InputOption::VALUE_NONE,    'Skip llms-full.txt generation');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $storeCode = $input->getOption(self::OPT_STORE) ?: null;
-        $skipJsonl = (bool) $input->getOption(self::OPT_NO_JSONL);
-        $skipLlms  = (bool) $input->getOption(self::OPT_NO_LLMS);
+        // Set area code if not already set (so emulation works).
+        try {
+            $this->appState->getAreaCode();
+        } catch (\Throwable) {
+            $this->appState->setAreaCode(\Magento\Framework\App\Area::AREA_CRONTAB);
+        }
 
         $output->writeln('');
-        $output->writeln('<info>Angeo LLMs.txt Generator</info>');
+        $output->writeln('<info>Angeo LLMs.txt Generator 3.0</info>');
         $output->writeln('');
 
         if (!$this->config->isEnabled()) {
@@ -52,81 +65,62 @@ class GenerateCommand extends Command
             return Command::SUCCESS;
         }
 
-        $stores = $storeCode
-            ? [$this->storeManager->getStore($storeCode)]
-            : $this->storeManager->getStores();
+        $storeCode = $input->getOption(self::OPT_STORE) ?: null;
+        $skip = [
+            'llms_txt'      => (bool) $input->getOption(self::OPT_NO_LLMS),
+            'llms_full_txt' => (bool) $input->getOption(self::OPT_NO_FULL),
+            'jsonl'         => (bool) $input->getOption(self::OPT_NO_JSONL),
+        ];
 
-        $active = array_filter(iterator_to_array($stores), fn($s) => $s->isActive());
-
-        // Filter out stores excluded in config (unless a specific store was requested)
-        if (!$storeCode) {
-            $active = array_filter($active, function ($store) use ($output) {
-                if ($this->config->isStoreExcluded($store)) {
-                    $output->writeln(sprintf(
-                        '  <comment>Skipping %s</comment> (excluded in Stores → Configuration → Angeo → LLMs.txt)',
-                        $store->getCode()
-                    ));
-                    return false;
-                }
-                return true;
-            });
+        $start = microtime(true);
+        try {
+            $summaries = $this->generationService->generateAll($storeCode, $skip);
+        } catch (\Throwable $e) {
+            $output->writeln('<error>FAILED: ' . $e->getMessage() . '</error>');
+            return Command::FAILURE;
         }
 
-        if (empty($active)) {
-            $output->writeln('<comment>No active stores found.</comment>');
-            return Command::SUCCESS;
-        }
+        $this->renderSummaries($output, $summaries);
 
+        $output->writeln('');
         $output->writeln(sprintf(
-            'Generating for <comment>%d</comment> store(s): <comment>%s</comment>',
-            count($active),
-            implode(', ', array_map(fn($s) => $s->getCode(), $active))
+            '<info>Total time: %.2fs</info>',
+            microtime(true) - $start
         ));
-        $output->writeln('');
 
-        $errors = 0;
-
-        if (!$skipLlms) {
-            $output->write('  Generating llms.txt... ');
-            $start = microtime(true);
-            try {
-                $this->llmsGenerator->generate($storeCode);
-                $output->writeln(sprintf('<info>done</info> (%.2fs)', microtime(true) - $start));
-            } catch (\Throwable $e) {
-                $output->writeln('<error>FAILED: ' . $e->getMessage() . '</error>');
-                $errors++;
+        foreach ($summaries as $summary) {
+            if ($summary->hasFailures()) {
+                return Command::FAILURE;
             }
         }
+        return Command::SUCCESS;
+    }
 
-        if (!$skipJsonl) {
-            $output->write('  Generating JSONL...   ');
-            $start = microtime(true);
-            try {
-                $this->jsonlGenerator->generate($storeCode);
-                $output->writeln(sprintf('<info>done</info> (%.2fs)', microtime(true) - $start));
-            } catch (\Throwable $e) {
-                $output->writeln('<error>FAILED: ' . $e->getMessage() . '</error>');
-                $errors++;
+    /**
+     * @param array<string, GenerationSummary> $summaries
+     */
+    private function renderSummaries(OutputInterface $output, array $summaries): void
+    {
+        foreach ($summaries as $format => $summary) {
+            $output->writeln('');
+            $output->writeln(sprintf('<comment>%s</comment>', $format));
+
+            foreach ($summary->getSuccesses() as $storeCode => $data) {
+                $output->writeln(sprintf(
+                    '  <info>✓</info> %s — %s, %d items, %.2fs',
+                    $storeCode,
+                    $this->formatBytes($data['bytes']),
+                    $data['items'],
+                    $data['duration']
+                ));
+            }
+            foreach ($summary->getFailures() as $storeCode => $error) {
+                $output->writeln(sprintf('  <error>✗ %s — %s</error>', $storeCode, $error));
+            }
+            foreach ($summary->getSkipped() as $storeCode) {
+                $output->writeln(sprintf('  <comment>– %s (skipped)</comment>', $storeCode));
             }
         }
-
-        $output->writeln('');
-        foreach ($active as $store) {
-            $txtPath  = $this->llmsGenerator->getFilePath($store->getCode());
-            $jsonlPath = $this->jsonlGenerator->getFilePath($store->getCode());
-            $output->writeln(sprintf('  <comment>%s</comment>', $store->getCode()));
-            if (!$skipLlms) {
-                $size = file_exists($txtPath) ? $this->formatBytes(filesize($txtPath)) : 'not generated';
-                $output->writeln("    llms.txt  → {$txtPath} ({$size})");
-            }
-            if (!$skipJsonl) {
-                $size = file_exists($jsonlPath) ? $this->formatBytes(filesize($jsonlPath)) : 'not generated';
-                $output->writeln("    llms.jsonl → {$jsonlPath} ({$size})");
-            }
-        }
-        $output->writeln('');
-
-        return $errors > 0 ? Command::FAILURE : Command::SUCCESS;
     }
 
     private function formatBytes(int $bytes): string

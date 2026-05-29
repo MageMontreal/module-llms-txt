@@ -1,45 +1,64 @@
 {
     "name": "angeo/module-llms-txt",
-    "version": "2.1.4",
-    "description": "Magento 2 module for AI Engine Optimization (AEO). Generates spec-compliant llms.txt and llms-full.txt per llmstxt.org standard, plus JSONL for vector indexing. Multi-store, CLI, cron, Admin UI.",
+    "description": "Magento 2 module for AI Engine Optimization (AEO). Generates spec-compliant llms.txt and llms-full.txt per llmstxt.org standard, plus streaming JSONL for vector indexing. Multi-store, multi-website, CLI, cron, async admin UI, Page Builder-aware sanitization, customer-group pricing, atomic writes, ETag/Cache-Control, .md mirrors.",
+    "type": "magento2-module",
     "keywords": [
         "magento2",
-        "magento module",
+        "magento-module",
         "angeo",
         "aeo",
         "llms.txt",
+        "llms-full.txt",
         "ai-commerce",
         "ai-search",
         "chatgpt",
         "claude",
-        "gemini"
+        "gemini",
+        "perplexity",
+        "page-builder"
     ],
     "homepage": "https://angeo.dev/",
     "support": {
-        "email": "support@angeo.dev"
+        "email": "support@angeo.dev",
+        "issues": "https://github.com/angeo-dev/module-llms-txt/issues",
+        "source": "https://github.com/angeo-dev/module-llms-txt"
     },
     "authors": [
         {
             "name": "Ievgenii Gryshkun",
             "email": "info@angeo.dev",
-            "homepage": "https://angeo.dev/"
+            "homepage": "https://angeo.dev/",
+            "role": "Maintainer"
         }
     ],
-    "type": "magento2-module",
+    "license": "MIT",
     "require": {
-        "php": ">=8.1",
-        "magento/framework": "*",
-        "magento/module-store": "*",
-        "magento/module-catalog": "*",
-        "magento/module-cms": "*",
-        "magento/module-backend": "*"
+        "php": "~8.2.0||~8.3.0||~8.4.0",
+        "ext-json": "*",
+        "ext-mbstring": "*",
+        "magento/framework": "^103.0",
+        "magento/module-store": "^101.1",
+        "magento/module-catalog": "^104.0",
+        "magento/module-cms": "^104.0",
+        "magento/module-backend": "^102.0",
+        "magento/module-config": "^101.2",
+        "magento/module-url-rewrite": "^101.2",
+        "magento/module-catalog-url-rewrite": "^100.4",
+        "magento/module-catalog-inventory": "^100.4"
     },
     "require-dev": {
-        "phpunit/phpunit": "^10.0"
+        "phpunit/phpunit": "^10.5",
+        "magento/magento-coding-standard": "^32.0",
+        "phpstan/phpstan": "^1.10"
     },
-    "license": ["MIT"],
+    "suggest": {
+        "magento/module-page-builder": "Enable to opt-in or opt-out of Page Builder content elements per content-type during sanitization",
+        "magento/module-shared-catalog": "Adobe Commerce: integrate B2B shared catalogs so llms.txt only exposes the allowed catalog"
+    },
     "autoload": {
-        "files": ["registration.php"],
+        "files": [
+            "registration.php"
+        ],
         "psr-4": {
             "Angeo\\LlmsTxt\\": ""
         }

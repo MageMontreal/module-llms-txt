@@ -1,39 +1,86 @@
 <?xml version="1.0"?>
+<!--
+  ~ Angeo LLMs.txt — Magento 2 module
+  ~ @license MIT
+  -->
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+
+    <!-- ─── SPI bindings ─────────────────────────────────────────────── -->
+    <preference for="Angeo\LlmsTxt\Api\SanitizerInterface"
+                type="Angeo\LlmsTxt\Model\Sanitizer\Sanitizer"/>
+    <preference for="Angeo\LlmsTxt\Api\UrlResolverInterface"
+                type="Angeo\LlmsTxt\Model\Url\UrlResolver"/>
+    <preference for="Angeo\LlmsTxt\Api\GenerationStatusRepositoryInterface"
+                type="Angeo\LlmsTxt\Model\Repository\GenerationStatusRepository"/>
+    <preference for="Angeo\LlmsTxt\Api\Data\GenerationStatusInterface"
+                type="Angeo\LlmsTxt\Model\Data\GenerationStatus"/>
+
+    <!-- ─── CLI commands ─────────────────────────────────────────────── -->
     <type name="Magento\Framework\Console\CommandList">
         <arguments>
             <argument name="commands" xsi:type="array">
                 <item name="angeo_llms_generate" xsi:type="object">Angeo\LlmsTxt\Console\Command\GenerateCommand</item>
+                <item name="angeo_llms_status"   xsi:type="object">Angeo\LlmsTxt\Console\Command\StatusCommand</item>
+                <item name="angeo_llms_validate" xsi:type="object">Angeo\LlmsTxt\Console\Command\ValidateCommand</item>
             </argument>
         </arguments>
     </type>
 
-    <!-- ══════════════════════════════════════════
-         llms.txt providers (spec-compliant markdown)
-         Order matters: StoreProvider MUST be first (generates H1 title)
-    ══════════════════════════════════════════════ -->
-    <type name="Angeo\LlmsTxt\Model\LlmsGenerator">
+    <!-- ─── Sanitizer pipeline ────────────────────────────────────────
+         Run order matters:
+           1. CMS directives must resolve BEFORE Page Builder filtering (some
+              Page Builder blocks contain {{widget}} directives).
+           2. Page Builder removal must run BEFORE strip_tags so we can use the
+              data-content-type attribute to identify elements.
+           3. HTML stripping last.
+           4. Whitespace normalization at the end.
+      ── -->
+    <type name="Angeo\LlmsTxt\Model\Sanitizer\Sanitizer">
         <arguments>
-            <argument name="providers" xsi:type="array">
-                <item name="store" xsi:type="object">Angeo\LlmsTxt\Model\Llms\Providers\StoreProvider</item>
-                <item name="category" xsi:type="object">Angeo\LlmsTxt\Model\Llms\Providers\CategoryProvider</item>
-                <item name="product" xsi:type="object">Angeo\LlmsTxt\Model\Llms\Providers\ProductProvider</item>
-                <item name="cms" xsi:type="object">Angeo\LlmsTxt\Model\Llms\Providers\CmsPageProvider</item>
+            <argument name="filters" xsi:type="array">
+                <item name="cms_directive" xsi:type="object">Angeo\LlmsTxt\Model\Sanitizer\Filter\CmsDirectiveFilter</item>
+                <item name="page_builder"  xsi:type="object">Angeo\LlmsTxt\Model\Sanitizer\Filter\PageBuilderFilter</item>
+                <item name="html"          xsi:type="object">Angeo\LlmsTxt\Model\Sanitizer\Filter\HtmlFilter</item>
+                <item name="whitespace"    xsi:type="object">Angeo\LlmsTxt\Model\Sanitizer\Filter\WhitespaceFilter</item>
             </argument>
         </arguments>
     </type>
 
-    <!-- ══════════════════════════════════════════
-         JSONL providers (one JSON object per line)
-    ══════════════════════════════════════════════ -->
-    <type name="Angeo\LlmsTxt\Model\JsonlGenerator">
+    <!-- ─── LLMs.txt providers (markdown) ─────────────────────────────
+         Order matters: StoreProvider MUST run first (emits the H1 + blockquote).
+      ── -->
+    <type name="Angeo\LlmsTxt\Model\Generator\LlmsTxtGenerator">
         <arguments>
             <argument name="providers" xsi:type="array">
-                <item name="store" xsi:type="object">Angeo\LlmsTxt\Model\Jsonl\Providers\StoreProvider</item>
-                <item name="category" xsi:type="object">Angeo\LlmsTxt\Model\Jsonl\Providers\CategoryProvider</item>
-                <item name="product" xsi:type="object">Angeo\LlmsTxt\Model\Jsonl\Providers\ProductProvider</item>
-                <item name="cms" xsi:type="object">Angeo\LlmsTxt\Model\Jsonl\Providers\CmsPageProvider</item>
+                <item name="store"    xsi:type="object">Angeo\LlmsTxt\Model\Provider\Llms\StoreProvider</item>
+                <item name="category" xsi:type="object">Angeo\LlmsTxt\Model\Provider\Llms\CategoryProvider</item>
+                <item name="cms"      xsi:type="object">Angeo\LlmsTxt\Model\Provider\Llms\CmsPageProvider</item>
+                <item name="product"  xsi:type="object">Angeo\LlmsTxt\Model\Provider\Llms\ProductProvider</item>
+            </argument>
+        </arguments>
+    </type>
+
+    <!-- ─── llms-full.txt providers ─── -->
+    <type name="Angeo\LlmsTxt\Model\Generator\LlmsFullTxtGenerator">
+        <arguments>
+            <argument name="providers" xsi:type="array">
+                <item name="store"    xsi:type="object">Angeo\LlmsTxt\Model\Provider\Llms\StoreProvider</item>
+                <item name="category" xsi:type="object">Angeo\LlmsTxt\Model\Provider\Llms\CategoryProvider</item>
+                <item name="cms"      xsi:type="object">Angeo\LlmsTxt\Model\Provider\Llms\CmsPageProvider</item>
+                <item name="product"  xsi:type="object">Angeo\LlmsTxt\Model\Provider\Llms\ProductProvider</item>
+            </argument>
+        </arguments>
+    </type>
+
+    <!-- ─── JSONL providers ─── -->
+    <type name="Angeo\LlmsTxt\Model\Generator\JsonlGenerator">
+        <arguments>
+            <argument name="providers" xsi:type="array">
+                <item name="store"    xsi:type="object">Angeo\LlmsTxt\Model\Provider\Jsonl\StoreProvider</item>
+                <item name="category" xsi:type="object">Angeo\LlmsTxt\Model\Provider\Jsonl\CategoryProvider</item>
+                <item name="cms"      xsi:type="object">Angeo\LlmsTxt\Model\Provider\Jsonl\CmsPageProvider</item>
+                <item name="product"  xsi:type="object">Angeo\LlmsTxt\Model\Provider\Jsonl\ProductProvider</item>
             </argument>
         </arguments>
     </type>
