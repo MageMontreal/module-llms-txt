@@ -131,7 +131,7 @@ class ValidateCommand extends Command
 
     private function validateJsonl(string $path, OutputInterface $output): int
     {
-        $handle = @fopen($path, 'r');
+        $handle = fopen($path, 'r');
         if (!$handle) {
             $output->writeln('  <error>✗ JSONL: cannot open file</error>');
             return 1;

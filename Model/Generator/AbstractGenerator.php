@@ -339,13 +339,13 @@ abstract class AbstractGenerator
             $directory->create($parent);
         }
 
-        $handle = @fopen($absolute, 'c+');
+        $handle = fopen($absolute, 'c+');
         if ($handle === false) {
             return null;
         }
 
-        if (!@flock($handle, LOCK_EX | LOCK_NB)) {
-            @fclose($handle);
+        if (!flock($handle, LOCK_EX | LOCK_NB)) {
+            fclose($handle);
             return null;
         }
 
@@ -358,8 +358,8 @@ abstract class AbstractGenerator
     private function releaseLock(WriteInterface $directory, string $lockPath, mixed $handle): void
     {
         if (is_resource($handle)) {
-            @flock($handle, LOCK_UN);
-            @fclose($handle);
+            flock($handle, LOCK_UN);
+            fclose($handle);
         }
         // Best-effort cleanup of the lock file itself.
         try {

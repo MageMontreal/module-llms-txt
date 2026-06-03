@@ -77,7 +77,7 @@ class Index implements ActionInterface, HttpGetActionInterface
             // Per-spec mime, cache headers, ETag, conditional GET.
             $mtime = (int) filemtime($absolutePath);
             $size  = (int) filesize($absolutePath);
-            $etag  = sprintf('"%s-%x-%x"', substr(md5($absolutePath), 0, 8), $mtime, $size);
+            $etag  = sprintf('"%s-%x-%x"', substr(hash('sha256', $absolutePath), 0, 8), $mtime, $size);
 
             $ifNoneMatch = $this->request->getHeader('If-None-Match');
             $ifModifiedSince = $this->request->getHeader('If-Modified-Since');
