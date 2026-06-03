@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.0.4] — 2026-06-03
+
+Compatibility patch. No functional or API changes — safe drop-in upgrade
+from 3.0.x.
+
+### Changed
+
+* **Lowered the minimum PHP to 8.1** (`~8.1.0||~8.2.0||~8.3.0||~8.4.0`).
+  The module uses no PHP 8.2+ only syntax, so it runs on 2.4.5 / 2.4.6 stores
+  that are still on PHP 8.1 as well as on 2.4.7 / 2.4.8 (PHP 8.3 / 8.4).
+* **Broadened dependency constraints to cover 2.4.5 through 2.4.8.** Every
+  Magento dependency in `require` now uses an open lower-bound (`>=`) pinned to
+  the major line that shipped with 2.4.5 — e.g. `magento/framework: >=102.0`
+  and `magento/module-url-rewrite: >=102.0`. Because these major lines do not
+  change between 2.4.5 and 2.4.8, the module installs cleanly across all of
+  those minors. This replaces the earlier exact carets (such as the `^101.2`
+  on `module-url-rewrite`) that failed on 2.4.8, where that module ships as
+  102.x.
+
+---
+
 ## [3.0.2] — 2026-06-03
 
 Marketplace-readiness patch. No functional or API changes — safe drop-in
